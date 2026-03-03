@@ -50,7 +50,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const saveBtn = document.getElementById("saveBtn");
-const historyTable = document.getElementById("historyTable");
+const tableBody = document.getElementById("quoteTable");
 
 async function generateQuoteNumber() {
     const year = new Date().getFullYear();
@@ -58,7 +58,7 @@ async function generateQuoteNumber() {
 
     const currentYearQuotes = snapshot.docs.filter(doc => {
         const data = doc.data();
-        return data.quoteNo && data.quoteNo.includes(year);
+        return data.quoteNo && data.quoteNo.startsWith(`EVG-${year}`);
     });
 
     const nextNumber = currentYearQuotes.length + 1;
@@ -68,8 +68,8 @@ async function generateQuoteNumber() {
 }
 
 saveBtn.addEventListener("click", async () => {
-    const client = document.getElementById("clientInput").value;
-    const totalPrice = document.getElementById("priceInput").value;
+    const client = document.getElementById("clientInput").value.trim();
+    const totalPrice = document.getElementById("priceInput").value.trim();
 
     if (!client || !totalPrice) {
         alert("Please fill all fields");
@@ -93,13 +93,16 @@ async function loadQuotes() {
     const q = query(collection(db, "quotes"), orderBy("createdAt", "desc"));
     const snapshot = await getDocs(q);
 
+    tableBody.innerHTML = "";
+
     snapshot.forEach(doc => {
         const data = doc.data();
 
-        const row = historyTable.insertRow();
+        const row = tableBody.insertRow();
+
         row.insertCell(0).innerText = data.quoteNo || "";
-        row.insertCell(1).innerText = data.client;
-        row.insertCell(2).innerText = data.totalPrice;
+        row.insertCell(1).innerText = data.client || "";
+        row.insertCell(2).innerText = data.totalPrice || "";
         row.insertCell(3).innerText = data.createdAt?.toDate().toLocaleString() || "";
     });
 }
@@ -110,4 +113,5 @@ loadQuotes();
 
 </body>
 </html>
+
 
