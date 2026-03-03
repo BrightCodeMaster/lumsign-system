@@ -39,57 +39,70 @@ th { background: #f4f4f4; }
 </table>
 
 <script type="module">
-import { app } from "./firebase-config.js";
-import { getFirestore, collection, addDoc, getDocs, query, orderBy }
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } 
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const button = document.getElementById("saveBtn");
-const table = document.getElementById("quoteTable");
+
+const saveBtn = document.getElementById("saveBtn");
+const historyTable = document.getElementById("historyTable");
+
+async function generateQuoteNumber() {
+    const year = new Date().getFullYear();
+    const snapshot = await getDocs(collection(db, "quotes"));
+
+    const currentYearQuotes = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return data.quoteNo && data.quoteNo.includes(year);
+    });
+
+    const nextNumber = currentYearQuotes.length + 1;
+    const padded = String(nextNumber).padStart(3, '0');
+
+    return `EVG-${year}-${padded}`;
+}
+
+saveBtn.addEventListener("click", async () => {
+    const client = document.getElementById("clientInput").value;
+    const totalPrice = document.getElementById("priceInput").value;
+
+    if (!client || !totalPrice) {
+        alert("Please fill all fields");
+        return;
+    }
+
+    const quoteNo = await generateQuoteNumber();
+
+    await addDoc(collection(db, "quotes"), {
+        quoteNo: quoteNo,
+        client: client,
+        totalPrice: totalPrice,
+        createdAt: serverTimestamp()
+    });
+
+    alert("Quote Created: " + quoteNo);
+    location.reload();
+});
 
 async function loadQuotes() {
-    table.innerHTML = "";
     const q = query(collection(db, "quotes"), orderBy("createdAt", "desc"));
     const snapshot = await getDocs(q);
 
     snapshot.forEach(doc => {
         const data = doc.data();
-        const row = `
-            <tr>
-                <td>${data.quoteNo}</td>
-                <td>${data.client}</td>
-                <td>${data.totalPrice}</td>
-                <td>${new Date(data.createdAt.seconds * 1000).toLocaleString()}</td>
-            </tr>
-        `;
-        table.innerHTML += row;
+
+        const row = historyTable.insertRow();
+        row.insertCell(0).innerText = data.quoteNo || "";
+        row.insertCell(1).innerText = data.client;
+        row.insertCell(2).innerText = data.totalPrice;
+        row.insertCell(3).innerText = data.createdAt?.toDate().toLocaleString() || "";
     });
 }
-
-function generateQuoteNumber() {
-    const year = new Date().getFullYear();
-    const random = Math.floor(1000 + Math.random() * 9000);
-    return `LS-${year}-${random}`;
-}
-
-button.addEventListener("click", async () => {
-
-    const client = document.getElementById("clientInput").value;
-    const total = document.getElementById("priceInput").value;
-
-    const quoteNo = generateQuoteNumber();
-
-    await addDoc(collection(db, "quotes"), {
-        quoteNo: quoteNo,
-        client: client,
-        totalPrice: total,
-        createdAt: new Date()
-    });
-
-    alert("Quote Created: " + quoteNo);
-
-    loadQuotes();
-});
 
 loadQuotes();
 
@@ -97,3 +110,4 @@ loadQuotes();
 
 </body>
 </html>
+
