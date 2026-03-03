@@ -2,52 +2,97 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LumSign Quote System</title>
+<title>LumSign Quote System V2</title>
+<style>
+body { font-family: Arial; padding: 20px; }
+input { margin-bottom: 10px; padding: 5px; }
+button { padding: 6px 12px; cursor: pointer; }
+table { margin-top: 30px; border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 8px; }
+th { background: #f4f4f4; }
+</style>
 </head>
 
 <body>
 
-<h2>LumSign Quote</h2>
+<h2>LumSign Quote V2</h2>
 
-<label>Client</label>
-<input id="clientInput">
+<label>Client</label><br>
+<input id="clientInput"><br>
 
-<br><br>
+<label>Total Price</label><br>
+<input id="priceInput"><br>
 
-<label>Total Price</label>
-<input id="priceInput">
+<button id="saveBtn">Create Quote</button>
 
-<br><br>
-
-<button id="saveBtn">Save Quote</button>
+<h3>Quote History</h3>
+<table>
+<thead>
+<tr>
+<th>Quote No</th>
+<th>Client</th>
+<th>Total Price</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody id="quoteTable"></tbody>
+</table>
 
 <script type="module">
 import { app } from "./firebase-config.js";
-import { getFirestore, collection, addDoc } 
+import { getFirestore, collection, addDoc, getDocs, query, orderBy }
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const db = getFirestore(app);
-
 const button = document.getElementById("saveBtn");
+const table = document.getElementById("quoteTable");
+
+async function loadQuotes() {
+    table.innerHTML = "";
+    const q = query(collection(db, "quotes"), orderBy("createdAt", "desc"));
+    const snapshot = await getDocs(q);
+
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        const row = `
+            <tr>
+                <td>${data.quoteNo}</td>
+                <td>${data.client}</td>
+                <td>${data.totalPrice}</td>
+                <td>${new Date(data.createdAt.seconds * 1000).toLocaleString()}</td>
+            </tr>
+        `;
+        table.innerHTML += row;
+    });
+}
+
+function generateQuoteNumber() {
+    const year = new Date().getFullYear();
+    const random = Math.floor(1000 + Math.random() * 9000);
+    return `LS-${year}-${random}`;
+}
 
 button.addEventListener("click", async () => {
+
     const client = document.getElementById("clientInput").value;
     const total = document.getElementById("priceInput").value;
 
-    try {
-        await addDoc(collection(db, "quotes"), {
-            client: client,
-            totalPrice: total,
-            createdAt: new Date()
-        });
+    const quoteNo = generateQuoteNumber();
 
-        alert("Quote Saved Successfully 🔥");
+    await addDoc(collection(db, "quotes"), {
+        quoteNo: quoteNo,
+        client: client,
+        totalPrice: total,
+        createdAt: new Date()
+    });
 
-    } catch (error) {
-        console.error("Error saving:", error);
-        alert("Error saving quote");
-    }
+    alert("Quote Created: " + quoteNo);
+
+    loadQuotes();
 });
+
+loadQuotes();
+
 </script>
 
 </body>
