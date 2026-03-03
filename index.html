@@ -4,17 +4,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LumSign Quote System</title>
 </head>
+
 <body>
 
 <h2>LumSign Quote</h2>
 
 <label>Client</label>
-<input>
+<input id="clientInput">
+
+<br><br>
 
 <label>Total Price</label>
-<input>
+<input id="priceInput">
 
-<button>Test Button</button>
+<br><br>
+
+<button id="saveBtn">Save Quote</button>
+
+<script type="module">
+import { app } from "./firebase-config.js";
+import { getFirestore, collection, addDoc } 
+from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const db = getFirestore(app);
+
+const button = document.getElementById("saveBtn");
+
+button.addEventListener("click", async () => {
+    const client = document.getElementById("clientInput").value;
+    const total = document.getElementById("priceInput").value;
+
+    try {
+        await addDoc(collection(db, "quotes"), {
+            client: client,
+            totalPrice: total,
+            createdAt: new Date()
+        });
+
+        alert("Quote Saved Successfully 🔥");
+
+    } catch (error) {
+        console.error("Error saving:", error);
+        alert("Error saving quote");
+    }
+});
+</script>
 
 </body>
 </html>
