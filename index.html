@@ -41,8 +41,17 @@ th { background: #f4f4f4; }
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } 
-from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  query, 
+  orderBy, 
+  serverTimestamp,
+  doc,
+  runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -52,59 +61,92 @@ const db = getFirestore(app);
 const saveBtn = document.getElementById("saveBtn");
 const tableBody = document.getElementById("quoteTable");
 
-async function generateQuoteNumber() {
-    const year = new Date().getFullYear();
-    const snapshot = await getDocs(collection(db, "quotes"));
+function pad(num) {
+  return String(num).padStart(3, "0");
+}
 
-    const currentYearQuotes = snapshot.docs.filter(doc => {
-        const data = doc.data();
-        return data.quoteNo && data.quoteNo.startsWith(`EVG-${year}`);
+async function generateNumbers() {
+
+  const counterRef = doc(db, "counters", "mainCounter");
+
+  const result = await runTransaction(db, async (transaction) => {
+
+    const counterDoc = await transaction.get(counterRef);
+
+    if (!counterDoc.exists()) {
+      throw "Counter document does not exist!";
+    }
+
+    let quoteNumber = counterDoc.data().quoteNumber + 1;
+    let invoiceNumber = counterDoc.data().invoiceNumber + 1;
+
+    transaction.update(counterRef, {
+      quoteNumber: quoteNumber,
+      invoiceNumber: invoiceNumber
     });
 
-    const nextNumber = currentYearQuotes.length + 1;
-    const padded = String(nextNumber).padStart(3, '0');
+    const year = new Date().getFullYear();
 
-    return `EVG-${year}-${padded}`;
+    return {
+      quoteNo: `EVG-Q-${year}-${pad(quoteNumber)}`,
+      invoiceNo: `EVG-I-${year}-${pad(invoiceNumber)}`
+    };
+  });
+
+  return result;
 }
 
 saveBtn.addEventListener("click", async () => {
-    const client = document.getElementById("clientInput").value.trim();
-    const totalPrice = document.getElementById("priceInput").value.trim();
 
-    if (!client || !totalPrice) {
-        alert("Please fill all fields");
-        return;
-    }
+  const client = document.getElementById("clientInput").value.trim();
+  const subtotalInput = document.getElementById("priceInput").value.trim();
 
-    const quoteNo = await generateQuoteNumber();
+  if (!client || !subtotalInput) {
+    alert("Please fill all fields");
+    return;
+  }
 
-    await addDoc(collection(db, "quotes"), {
-        quoteNo: quoteNo,
-        client: client,
-        totalPrice: totalPrice,
-        createdAt: serverTimestamp()
-    });
+  const subtotal = parseFloat(subtotalInput);
+  const gst = subtotal * 0.05;
+  const total = subtotal + gst;
+  const deposit = total * 0.65;
+  const balance = total * 0.35;
 
-    alert("Quote Created: " + quoteNo);
-    location.reload();
+  const numbers = await generateNumbers();
+
+  await addDoc(collection(db, "quotes"), {
+    quoteNo: numbers.quoteNo,
+    invoiceNo: numbers.invoiceNo,
+    client: client,
+    subtotal: subtotal,
+    gst: gst,
+    total: total,
+    deposit65: deposit,
+    balance35: balance,
+    createdAt: serverTimestamp()
+  });
+
+  alert("Created:\n" + numbers.quoteNo + "\n" + numbers.invoiceNo);
+
+  location.reload();
 });
 
 async function loadQuotes() {
-    const q = query(collection(db, "quotes"), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
 
-    tableBody.innerHTML = "";
+  const q = query(collection(db, "quotes"), orderBy("createdAt", "desc"));
+  const snapshot = await getDocs(q);
 
-    snapshot.forEach(doc => {
-        const data = doc.data();
+  tableBody.innerHTML = "";
 
-        const row = tableBody.insertRow();
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const row = tableBody.insertRow();
 
-        row.insertCell(0).innerText = data.quoteNo || "";
-        row.insertCell(1).innerText = data.client || "";
-        row.insertCell(2).innerText = data.totalPrice || "";
-        row.insertCell(3).innerText = data.createdAt?.toDate().toLocaleString() || "";
-    });
+    row.insertCell(0).innerText = data.quoteNo || "";
+    row.insertCell(1).innerText = data.client || "";
+    row.insertCell(2).innerText = "$" + (data.total?.toFixed(2) || "0");
+    row.insertCell(3).innerText = data.createdAt?.toDate().toLocaleString() || "";
+  });
 }
 
 loadQuotes();
@@ -113,5 +155,6 @@ loadQuotes();
 
 </body>
 </html>
+
 
 
