@@ -2,28 +2,42 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LumSign Quote System V2</title>
+<title>LumSign Quick Quote</title>
 <style>
-body { font-family: Arial; padding: 20px; }
-input { margin-bottom: 10px; padding: 5px; }
-button { padding: 6px 12px; cursor: pointer; }
+body { font-family: Arial; padding: 20px; max-width: 900px; margin:auto; }
+input, textarea { margin-bottom: 10px; padding: 6px; width:100%; }
+button { padding: 8px 14px; margin-right:10px; cursor: pointer; }
 table { margin-top: 30px; border-collapse: collapse; width: 100%; }
 th, td { border: 1px solid #ddd; padding: 8px; }
 th { background: #f4f4f4; }
+.headerBox { border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px; }
 </style>
 </head>
 
 <body>
 
-<h2>LumSign Quote V2</h2>
+<div class="headerBox">
+<h2>EV Green Energy Ltd</h2>
+Operating as LumSign<br>
+Licensed Electrical Contractor # LEL0208519<br>
+GST No: 71076 6924RT0001<br>
+Phone: 778-869-3568<br>
+Email: master.ji.ca@gmail.com
+</div>
 
-<label>Client</label><br>
-<input id="clientInput"><br>
+<h3>Quick Quote</h3>
 
-<label>Total Price</label><br>
-<input id="priceInput"><br>
+<label>Client</label>
+<input id="clientInput">
 
-<button id="saveBtn">Create Quote</button>
+<label>Subtotal (before GST)</label>
+<input id="priceInput">
+
+<label>Description</label>
+<textarea id="descInput" rows="4"></textarea>
+
+<button id="saveBtn">Create & Save Quote</button>
+<button id="pdfBtn">Generate PDF</button>
 
 <h3>Quote History</h3>
 <table>
@@ -31,7 +45,7 @@ th { background: #f4f4f4; }
 <tr>
 <th>Quote No</th>
 <th>Client</th>
-<th>Total Price</th>
+<th>Total</th>
 <th>Date</th>
 </tr>
 </thead>
@@ -53,12 +67,14 @@ import {
   runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+import jsPDF from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
 import { firebaseConfig } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const saveBtn = document.getElementById("saveBtn");
+const pdfBtn = document.getElementById("pdfBtn");
 const tableBody = document.getElementById("quoteTable");
 
 function pad(num) {
@@ -96,9 +112,20 @@ async function generateNumbers() {
   return result;
 }
 
+function calculate() {
+  const subtotal = parseFloat(document.getElementById("priceInput").value);
+  const gst = subtotal * 0.05;
+  const total = subtotal + gst;
+  const deposit = total * 0.65;
+  const balance = total * 0.35;
+
+  return { subtotal, gst, total, deposit, balance };
+}
+
 saveBtn.addEventListener("click", async () => {
 
   const client = document.getElementById("clientInput").value.trim();
+  const desc = document.getElementById("descInput").value.trim();
   const subtotalInput = document.getElementById("priceInput").value.trim();
 
   if (!client || !subtotalInput) {
@@ -106,33 +133,77 @@ saveBtn.addEventListener("click", async () => {
     return;
   }
 
-  const subtotal = parseFloat(subtotalInput);
-  const gst = subtotal * 0.05;
-  const total = subtotal + gst;
-  const deposit = total * 0.65;
-  const balance = total * 0.35;
-
   const numbers = await generateNumbers();
+  const calc = calculate();
 
   await addDoc(collection(db, "quotes"), {
     quoteNo: numbers.quoteNo,
     invoiceNo: numbers.invoiceNo,
     client: client,
-    subtotal: subtotal,
-    gst: gst,
-    total: total,
-    deposit65: deposit,
-    balance35: balance,
+    description: desc,
+    subtotal: calc.subtotal,
+    gst: calc.gst,
+    total: calc.total,
+    deposit65: calc.deposit,
+    balance35: calc.balance,
     createdAt: serverTimestamp()
   });
 
-  alert("Created:\n" + numbers.quoteNo + "\n" + numbers.invoiceNo);
-
+  alert("Created:\n" + numbers.quoteNo);
   location.reload();
 });
 
-async function loadQuotes() {
+pdfBtn.addEventListener("click", async () => {
 
+  const client = document.getElementById("clientInput").value.trim();
+  const desc = document.getElementById("descInput").value.trim();
+  const subtotalInput = document.getElementById("priceInput").value.trim();
+
+  if (!client || !subtotalInput) {
+    alert("Please fill all fields");
+    return;
+  }
+
+  const numbers = await generateNumbers();
+  const calc = calculate();
+
+  const docPDF = new jsPDF();
+
+  docPDF.setFontSize(14);
+  docPDF.text("EV Green Energy Ltd", 20, 20);
+  docPDF.setFontSize(10);
+  docPDF.text("Operating as LumSign", 20, 26);
+  docPDF.text("GST No: 71076 6924RT0001", 20, 32);
+
+  docPDF.setFontSize(12);
+  docPDF.text("Quotation", 150, 20);
+  docPDF.text("Quote No: " + numbers.quoteNo, 120, 30);
+  docPDF.text("Date: " + new Date().toLocaleDateString(), 120, 36);
+
+  docPDF.setFontSize(11);
+  docPDF.text("Client: " + client, 20, 60);
+  docPDF.text("Scope of Work:", 20, 75);
+  docPDF.text(desc, 20, 85);
+
+  docPDF.text("Subtotal: $" + calc.subtotal.toFixed(2), 20, 115);
+  docPDF.text("GST (5%): $" + calc.gst.toFixed(2), 20, 122);
+  docPDF.text("Total: $" + calc.total.toFixed(2), 20, 129);
+
+  docPDF.text("65% Deposit: $" + calc.deposit.toFixed(2), 20, 145);
+  docPDF.text("35% Balance: $" + calc.balance.toFixed(2), 20, 152);
+
+  docPDF.text("Payment Terms:", 20, 170);
+  docPDF.text("65% deposit upon acceptance", 20, 178);
+  docPDF.text("35% balance upon completion", 20, 184);
+  docPDF.text("Valid for 14 days", 20, 190);
+
+  docPDF.text("Accepted by: ____________________", 20, 210);
+  docPDF.text("Date: ____________________", 20, 218);
+
+  docPDF.save(numbers.quoteNo + ".pdf");
+});
+
+async function loadQuotes() {
   const q = query(collection(db, "quotes"), orderBy("createdAt", "desc"));
   const snapshot = await getDocs(q);
 
@@ -141,7 +212,6 @@ async function loadQuotes() {
   snapshot.forEach(doc => {
     const data = doc.data();
     const row = tableBody.insertRow();
-
     row.insertCell(0).innerText = data.quoteNo || "";
     row.insertCell(1).innerText = data.client || "";
     row.insertCell(2).innerText = "$" + (data.total?.toFixed(2) || "0");
@@ -155,6 +225,7 @@ loadQuotes();
 
 </body>
 </html>
+
 
 
 
